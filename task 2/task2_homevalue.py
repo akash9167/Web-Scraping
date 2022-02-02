@@ -1,7 +1,3 @@
-#this is as a reference for IDS 566 Spring 2022 Homework #1 only#
-#do not use it for other purposes#
-
-
 import requests
 import json
 from bs4 import BeautifulSoup
@@ -10,6 +6,7 @@ import time
 import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
+import numpy as np
 
 url = 'https://www.zillow.com/graphql/'
 
@@ -24,7 +21,8 @@ headers = {'authority': 'www.zillow.com', 'method':'POST'
 ,'origin': 'https://www.zillow.com'
 ,'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36'}
 
-def json_walkscore(zpid):
+# Simulate API payload
+def json_homevalue(zpid):
     #this is payload, i.e., the query sent to zillow server
     chartData = {"operationName":"HomeValueChartDataQuery","variables":{"zpid":00000}
     ,"query":"query HomeValueChartDataQuery($zpid: ID!, $metricType: HomeValueChartMetricType, $timePeriod: HomeValueChartTimePeriod, $useNewChartAPI: Boolean) {\n  property(zpid: $zpid) {\n    homeValueChartData(metricType: $metricType, timePeriod: $timePeriod, useNewChartAPI: $useNewChartAPI) {\n      points {\n        x\n        y\n      }\n      name\n    }\n  }\n}\n"
@@ -33,10 +31,11 @@ def json_walkscore(zpid):
 
     return chartData
 
-def get_json_walkscore(zpid):
+# Get homevalue json object using API
+def get_json_homevalue(zpid):
     #get json query ready, zpid as input
-    chartData = json_walkscore(zpid)
-    walktransitScore = []
+    chartData = json_homevalue(zpid)
+    homevalueScore = []
 
     try:
         chart_req = requests.post(url=url, json=chartData, headers=headers) #send request to zillow server
@@ -44,32 +43,34 @@ def get_json_walkscore(zpid):
         chart_out = json.loads(chart_req.text) #get the response from zillow server and load as json object
 
         #parse the json object to extract scores
-        walktransitScore.append(chart_out['data']['property']['homeValueChartData'])
-        #walktransitScore.append(chart_out['data']['property']['transitScore']['transit_score'])
+        homevalueScore.append(chart_out['data']['property']['homeValueChartData'])
 
-        return walktransitScore
+        return homevalueScore
 
     except Exception as e:
-        print ('error not 200, walk score, try again', e)
-        return walktransitScore
+        print ('error not 200, home value, try again', e)
+        return homevalueScore
 
-
-
-#for ids 566 demo
-output=get_json_walkscore(19620225)
-
+# Parsing json to get output
+output=get_json_homevalue(19620225)
 output_df = pd.DataFrame(output[0][0]['points'])
 
-output_df['mm_y'] = output_df['x'].apply(lambda x: datetime.utcfromtimestamp(x/1000).strftime('%m/%Y'))
-
+# Convert unix timestamp to date time
+output_df['date'] = output_df['x'].apply(lambda x: datetime.utcfromtimestamp(x/1000).strftime('%d/%m/%Y'))
+output_df['mm_y'] = output_df['date'].apply(lambda x: x[3:] )
 output_df = output_df.sort_values(by='x')
-
 output_df = output_df.drop('x', axis=1)
 
-print(output_df[['mm_y', 'y']])
-output_df[['mm_y', 'y']].to_csv('house_prices.csv')
+output_df['date'] = output_df['date'].astype('datetime64[ns, US/Central]')
 
-# plt.plot(output_df['mm_y'], output_df['y'])
-# plt.xlabel('Month/Year')
-# plt.ylabel('Housing Prices')
-# plt.show()
+print(output_df[['mm_y', 'y']])
+
+output_df.to_csv('house_prices.csv')
+
+plt.plot(output_df['date'], output_df['y'])
+plt.xlabel('Year')
+plt.ylabel('Housing Prices')
+plt.title('Changing in housing prices over years')
+# plt.xticks(np.arange(min(output_df['mm_y']), max(output_df['mm_y'])+1, 1.0))
+
+plt.show()
